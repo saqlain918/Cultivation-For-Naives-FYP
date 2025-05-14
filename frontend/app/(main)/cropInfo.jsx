@@ -1,66 +1,103 @@
 import axios from "axios";
-import { useState } from "react";
+import { useLocalSearchParams } from "expo-router";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  TextInput,
-  TouchableOpacity,
+  Alert,
 } from "react-native";
+import { Picker } from "@react-native-picker/picker"; // Import Picker
 
 const CropInfoScreen = () => {
-  const [cropName, setCropName] = useState(""); // Store the crop name entered by the user
   const [selectedCropInfo, setSelectedCropInfo] = useState(null); // Store the selected crop information
   const [loading, setLoading] = useState(false); // For loading state
+  const [selectedCrop, setSelectedCrop] = useState(""); // Store the dropdown selection
 
-  // Handle fetching crop info based on user input
-  const fetchCropInfo = async () => {
-    if (!cropName) {
-      alert("Please enter a crop name.");
+  const { bestCrop } = useLocalSearchParams();
+
+  // Static list of crops for the dropdown
+  const cropOptions = [
+    { label: "Select a Crop", value: "" },
+    { label: "Sugarcane", value: "Sugarcane" },
+    { label: "Wheat", value: "Wheat" },
+    { label: "Rice", value: "Rice" },
+    { label: "Cotton", value: "Cotton" },
+    { label: "Maize", value: "Maize" },
+  ];
+
+  // Handle fetching crop info based on selected crop
+  const fetchCropInfo = async (crop) => {
+    if (!crop) {
+      setSelectedCropInfo(null); // Clear info if no crop is selected
+      setLoading(false);
       return;
     }
 
+    setLoading(true);
     try {
-      setLoading(true);
       const res = await axios.post(
         `${process.env.EXPO_PUBLIC_BACKEND_URI}/api/crop-details/crop-info`,
-        {
-          crop: cropName,
-        }
+        { crop }
       );
       setSelectedCropInfo(res.data);
     } catch (error) {
-      Alert.alert("Error", error.message);
-    } finally {
-      setLoading(false);
+      Alert.alert(
+        "Error",
+        `Failed to fetch info for ${crop}: ${error.message}`
+      );
+      setSelectedCropInfo(null);
     }
+    setLoading(false);
   };
+
+  // Set initial crop from bestCrop and fetch its info
+  useEffect(() => {
+    if (bestCrop && cropOptions.some((option) => option.value === bestCrop)) {
+      setSelectedCrop(bestCrop);
+      fetchCropInfo(bestCrop);
+    }
+  }, [bestCrop]);
+
+  // Handle dropdown selection change
+  const handleCropChange = (crop) => {
+    setSelectedCrop(crop);
+    fetchCropInfo(crop);
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#4CAF50" />
+      </View>
+    );
+  }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Crop Information</Text>
 
-      {/* Input Field to Enter Crop Name */}
-      <TextInput
-        style={styles.input}
-        placeholder="Enter Crop Name"
-        value={cropName}
-        onChangeText={setCropName}
-      />
-
-      {/* Button to Fetch Crop Data */}
-      <TouchableOpacity style={styles.button} onPress={fetchCropInfo}>
-        <Text style={styles.buttonText}>Get Crop Info</Text>
-      </TouchableOpacity>
+      {/* Dropdown for Crop Selection */}
+      <View style={styles.pickerContainer}>
+        <Picker
+          selectedValue={selectedCrop}
+          onValueChange={(itemValue) => handleCropChange(itemValue)}
+          style={styles.picker}
+        >
+          {cropOptions.map((option) => (
+            <Picker.Item
+              key={option.value}
+              label={option.label}
+              value={option.value}
+            />
+          ))}
+        </Picker>
+      </View>
 
       {/* Display the Crop Information */}
-      {loading ? (
-        <View style={styles.centered}>
-          <ActivityIndicator size="large" color="#4CAF50" />
-        </View>
-      ) : selectedCropInfo ? (
+      {selectedCropInfo ? (
         <>
           <View style={styles.section}>
             <Text style={styles.subtitle}>Soil Preparation</Text>
@@ -83,6 +120,7 @@ const CropInfoScreen = () => {
               </View>
             ))}
           </View>
+
           <View style={styles.section}>
             <Text style={styles.subtitle}>
               Fertilizer and Watering Information
@@ -98,7 +136,9 @@ const CropInfoScreen = () => {
           </View>
         </>
       ) : (
-        <Text style={styles.errorText}>No information available</Text>
+        <Text style={styles.errorText}>
+          {selectedCrop ? "No information available" : "Please select a crop"}
+        </Text>
       )}
     </ScrollView>
   );
@@ -122,26 +162,16 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 20,
   },
-  input: {
-    height: 50,
-    borderColor: "#388E3C",
+  pickerContainer: {
     borderWidth: 1,
+    borderColor: "#388E3C",
     borderRadius: 8,
     marginBottom: 20,
-    paddingLeft: 10,
-    fontSize: 16,
+    backgroundColor: "#fff",
+  },
+  picker: {
+    height: 50,
     color: "#388E3C",
-  },
-  button: {
-    backgroundColor: "#388E3C",
-    padding: 15,
-    borderRadius: 8,
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  buttonText: {
-    color: "#fff",
-    fontSize: 18,
   },
   section: {
     marginBottom: 20,
@@ -180,6 +210,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "red",
     textAlign: "center",
+    marginTop: 20,
   },
 });
 

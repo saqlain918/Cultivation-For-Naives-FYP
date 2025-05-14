@@ -10,12 +10,11 @@ import {
 import { useRouter } from "expo-router";
 import axios from "axios";
 
-const Home = () => {
+const AdHome = () => {
   const router = useRouter();
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [ads, setAds] = useState([]);
 
-  // Fetch ads from backend
   useEffect(() => {
     const fetchAds = async () => {
       try {
@@ -26,26 +25,57 @@ const Home = () => {
         if (response.data && response.data.advertisements) {
           const adsWithFixedImageUri = response.data.advertisements.map(
             (ad) => {
-              const fixedImageUri = ad.image.replace(/\\/g, "/"); // Convert \ to /
-              // console.log("Fixed Image URI:", fixedImageUri); // Log corrected image URI
+              const fixedImageUri = ad.image.replace(/\\/g, "/");
               return { ...ad, image: fixedImageUri };
             }
           );
 
-          setAds(adsWithFixedImageUri);
+          const now = new Date();
+          const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+          const recentAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) > twentyFourHoursAgo : true
+          );
+          const olderAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) <= twentyFourHoursAgo : false
+          );
+
+          recentAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+          olderAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+
+          const topFiveAds = [...recentAds, ...olderAds].slice(0, 5);
+
+          console.log("All ads fetched:", adsWithFixedImageUri);
+          console.log(
+            "Top 5 ads selected:",
+            topFiveAds.map((ad) => ({
+              title: ad.title,
+              createdAt: ad.createdAt,
+              updatedAt: ad.updatedAt,
+            }))
+          );
+
+          setAds(topFiveAds);
         } else {
           setAds([]);
         }
       } catch (error) {
         console.error("Error fetching ads:", error);
-        Alert.alert("Error", "Failed to fetch advertisements");
+        setAds([]);
       }
     };
 
     fetchAds();
   }, []);
 
-  // Update image every 3 seconds only if there are ads
   useEffect(() => {
     if (ads.length === 0) return;
 
@@ -56,9 +86,22 @@ const Home = () => {
     return () => clearInterval(interval);
   }, [ads]);
 
+  const handleAdClick = () => {
+    if (ads.length > 0 && ads[currentImageIndex]) {
+      const selectedAd = ads[currentImageIndex];
+      router.push({
+        pathname: "/manage-ads",
+        params: {
+          imageUri: selectedAd.image,
+          adId: selectedAd._id,
+          fromAdHome: "true",
+        },
+      });
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      {/* Header Section */}
       <View style={styles.header}>
         <Text style={styles.logo}>Cultivation For Naives</Text>
         <TouchableOpacity style={styles.notificationIcon}>
@@ -69,18 +112,20 @@ const Home = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section */}
-      {ads.length > 0 ? (
-        <View style={styles.heroSection}>
+      {ads.length > 0 && ads[currentImageIndex] ? (
+        <TouchableOpacity style={styles.heroSection} onPress={handleAdClick}>
           <Image
             source={{
               uri: ads[currentImageIndex].image,
               cache: "reload",
             }}
             style={styles.heroImage}
+            onError={(e) =>
+              console.log("Image load error:", e.nativeEvent.error)
+            }
           />
           <Text style={styles.heroText}>{ads[currentImageIndex].title}</Text>
-        </View>
+        </TouchableOpacity>
       ) : (
         <View style={styles.heroSection}>
           <View style={[styles.heroImage, styles.placeholderContainer]}>
@@ -92,11 +137,9 @@ const Home = () => {
         </View>
       )}
 
-      {/* Dashboard Section */}
       <View style={styles.dashboardSection}>
         <Text style={styles.sectionTitle}>Dashboard</Text>
         <View style={styles.dashboardGrid}>
-          {/* Manage Profile */}
           <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push("/manage-profile")}
@@ -108,7 +151,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Manage Profile</Text>
           </TouchableOpacity>
 
-          {/* Monitor Farm */}
           <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push("/monitor-farm")}
@@ -120,7 +162,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Monitor Farm</Text>
           </TouchableOpacity>
 
-          {/* Manage Ads */}
           <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push("/manage-ads")}
@@ -134,11 +175,9 @@ const Home = () => {
         </View>
       </View>
 
-      {/* Features Section */}
       <View style={styles.featuresSection}>
         <Text style={styles.sectionTitle}>Features</Text>
         <View style={styles.featuresGrid}>
-          {/* Consult Expert */}
           <TouchableOpacity
             style={styles.featureCard}
             onPress={() => router.push("/consult-expert")}
@@ -150,7 +189,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Consult Expert</Text>
           </TouchableOpacity>
 
-          {/* Handle Equipment */}
           <TouchableOpacity
             style={styles.featureCard}
             onPress={() => router.push("/handle-equipment")}
@@ -162,7 +200,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Handle Equipment</Text>
           </TouchableOpacity>
 
-          {/* Forecast Yield */}
           <TouchableOpacity
             style={styles.featureCard}
             onPress={() => router.push("/forecast-yield")}
@@ -176,11 +213,9 @@ const Home = () => {
         </View>
       </View>
 
-      {/* Alerts Section */}
       <View style={styles.alertsSection}>
         <Text style={styles.sectionTitle}>Alerts & Insights</Text>
         <View style={styles.alertsGrid}>
-          {/* Weather Prediction */}
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/weather-prediction")}
@@ -191,8 +226,16 @@ const Home = () => {
             />
             <Text style={styles.cardTitle}>Weather Prediction</Text>
           </TouchableOpacity>
-
-          {/* Early Alerts */}
+          <TouchableOpacity
+            style={styles.alertCard}
+            onPress={() => router.push("/alerts")}
+          >
+            <Image
+              source={require("../../assets/icons/Addalert.png")}
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardTitle}>Add Alerts</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/early-alerts")}
@@ -201,18 +244,14 @@ const Home = () => {
               source={require("../../assets/icons/alerts.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Early Alerts</Text>
+            <Text style={styles.cardTitle}>View Alerts</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Feedback & Payments Section */}
       <View style={styles.feedbackSection}>
-        <Text style={styles.sectionTitle}>Timeline</Text>
+        <Text style={styles.sectionTitle}>Timeline & Thread</Text>
         <View style={styles.feedbackGrid}>
-          {/* Feedback */}
-
-          {/* Make Payment */}
           <TouchableOpacity
             style={styles.feedbackCard}
             onPress={() => router.push("/TimelineCrops")}
@@ -222,6 +261,27 @@ const Home = () => {
               style={styles.cardIcon}
             />
             <Text style={styles.cardTitle}>Timeline</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.dashboardCard}
+            onPress={() => router.push("/CreateThread")}
+          >
+            <Image
+              source={require("../../assets/icons/community.png")}
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardTitle}>Create Thread</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.dashboardCard}
+            onPress={() => router.push("/AdminReportsPage")}
+          >
+            <Image
+              source={require("../../assets/icons/Report.png")}
+              style={styles.cardIcon}
+            />
+            <Text style={styles.cardTitle}>Report Ads</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -267,12 +327,23 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
   },
+  placeholderContainer: {
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+  },
   heroText: {
     marginTop: 10,
     fontSize: 20,
     fontWeight: "bold",
     color: "#333",
     textAlign: "center",
+  },
+  dashboardSection: {
+    marginBottom: 15,
   },
   sectionTitle: {
     fontSize: 18,
@@ -307,6 +378,9 @@ const styles = StyleSheet.create({
     textAlign: "center",
     fontSize: 14,
   },
+  featuresSection: {
+    marginBottom: 15,
+  },
   featuresGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -323,6 +397,9 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
+  alertsSection: {
+    marginBottom: 15,
+  },
   alertsGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -330,7 +407,7 @@ const styles = StyleSheet.create({
   },
   alertCard: {
     backgroundColor: "#fff",
-    width: "45%",
+    width: "30%",
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
@@ -339,6 +416,9 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
+  feedbackSection: {
+    marginBottom: 15,
+  },
   feedbackGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -346,7 +426,7 @@ const styles = StyleSheet.create({
   },
   feedbackCard: {
     backgroundColor: "#fff",
-    width: "45%",
+    width: "27%",
     padding: 15,
     borderRadius: 10,
     alignItems: "center",
@@ -357,4 +437,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default Home;
+export default AdHome;

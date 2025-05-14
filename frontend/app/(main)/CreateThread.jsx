@@ -17,14 +17,13 @@ const GroupChat = () => {
   const [message, setMessage] = useState("");
   const [groupChat, setGroupChat] = useState(null);
   const [userId, setUserId] = useState(null);
-  const [userRole, setUserRole] = useState(null); // New state for user role
+  const [userRole, setUserRole] = useState(null);
   const [groupChats, setGroupChats] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [groupTitle, setGroupTitle] = useState(""); // For creating new thread
-  const [groupDescription, setGroupDescription] = useState(""); // For creating new thread
-  const [showCreateForm, setShowCreateForm] = useState(false); // Toggle create form
+  const [groupTitle, setGroupTitle] = useState("");
+  const [groupDescription, setGroupDescription] = useState("");
+  const [showCreateForm, setShowCreateForm] = useState(false);
 
-  // Fetch user ID, email, type, and group chats on mount
   useEffect(() => {
     const initialize = async () => {
       try {
@@ -33,26 +32,30 @@ const GroupChat = () => {
         if (token) {
           const decoded = decodeJWT(token);
           setUserId(decoded.userId);
-          console.log("Decoded Token:", decoded);
 
-          // Fetch user type using email from token
           const email = decoded.email;
           const typeResponse = await fetch(`${API_URL}/api/auth/type/${email}`);
           if (!typeResponse.ok) throw new Error("Failed to fetch user type");
           const { type } = await typeResponse.json();
-          console.log("Fetched Type:", type);
-          setUserRole(type); // Set role from backend
-        } else {
-          console.log("No token found");
+          setUserRole(type);
         }
 
         const response = await fetch(`${API_URL}/api/group-chats`);
         if (!response.ok) throw new Error("Failed to fetch group chats");
         const chats = await response.json();
-        setGroupChats(chats);
 
-        if (chats.length > 0) {
-          setGroupChat(chats[0]); // Auto-select first chat
+        // Ensure messages have sender data
+        const sanitizedChats = chats.map((chat) => ({
+          ...chat,
+          messages: chat.messages.map((msg) => ({
+            ...msg,
+            sender: msg.sender || { name: "Anonymous" },
+          })),
+        }));
+
+        setGroupChats(sanitizedChats);
+        if (sanitizedChats.length > 0) {
+          setGroupChat(sanitizedChats[0]);
         }
       } catch (error) {
         Alert.alert("Error", error.message);
@@ -63,7 +66,6 @@ const GroupChat = () => {
     initialize();
   }, []);
 
-  // Decode JWT
   const decodeJWT = (token) => {
     const base64Url = token.split(".")[1];
     const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
@@ -76,7 +78,6 @@ const GroupChat = () => {
     return JSON.parse(jsonPayload);
   };
 
-  // Create a new group chat (for farmers only)
   const handleCreateGroupChat = async () => {
     if (!groupTitle || !groupDescription) {
       Alert.alert("Error", "Please fill in both the title and description.");
@@ -94,18 +95,17 @@ const GroupChat = () => {
       });
       if (!response.ok) throw new Error("Failed to create group chat");
       const newGroupChat = await response.json();
-      setGroupChats((prev) => [...prev, newGroupChat]); // Add to list
-      setGroupChat(newGroupChat); // Select the new chat
+      setGroupChats((prev) => [...prev, newGroupChat]);
+      setGroupChat(newGroupChat);
       Alert.alert("Success", "Group chat created successfully!");
       setGroupTitle("");
       setGroupDescription("");
-      setShowCreateForm(false); // Hide form after creation
+      setShowCreateForm(false);
     } catch (error) {
       Alert.alert("Error", error.message);
     }
   };
 
-  // Post a message to the group chat
   const handleSendMessage = async () => {
     if (!message.trim()) {
       Alert.alert("Error", "Please enter a message.");
@@ -122,7 +122,14 @@ const GroupChat = () => {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text: message, senderId: userId }),
+          body: JSON.stringify({
+            text: message,
+            senderId: userId,
+            sender: {
+              id: userId,
+              name: (await AsyncStorage.getItem("userName")) || "Anonymous",
+            },
+          }),
         }
       );
       if (!response.ok) throw new Error("Failed to send message");
@@ -134,14 +141,19 @@ const GroupChat = () => {
     }
   };
 
-  // Select a group chat from the list
   const handleSelectGroupChat = async (chatId) => {
     try {
       setLoading(true);
       const response = await fetch(`${API_URL}/api/group-chats/${chatId}`);
       if (!response.ok) throw new Error("Failed to fetch group chat");
       const selectedChat = await response.json();
-      setGroupChat(selectedChat);
+      setGroupChat({
+        ...selectedChat,
+        messages: selectedChat.messages.map((msg) => ({
+          ...msg,
+          sender: msg.sender || { name: "Anonymous" },
+        })),
+      });
     } catch (error) {
       Alert.alert("Error", error.message);
     } finally {
@@ -149,7 +161,6 @@ const GroupChat = () => {
     }
   };
 
-  // Render group chat item
   const renderGroupChatItem = ({ item }) => (
     <TouchableOpacity
       style={[
@@ -167,47 +178,46 @@ const GroupChat = () => {
     <View style={styles.container}>
       <Text style={styles.header}>Community Connect</Text>
 
-      {/* Create Thread Button (Farmers Only) */}
       {userRole === "farmer" && (
         <TouchableOpacity
           style={styles.createButton}
           onPress={() => setShowCreateForm(!showCreateForm)}
         >
           <Text style={styles.buttonText}>
-            {showCreateForm ? "Cancel" : "Create New Thread"}
+            {showCreateForm ? "Close" : "Start a Thread"}
           </Text>
         </TouchableOpacity>
       )}
 
-      {/* Create Thread Form (Farmers Only) */}
       {userRole === "farmer" && showCreateForm && (
         <View style={styles.createForm}>
           <Text style={styles.label}>Thread Title</Text>
           <TextInput
             style={styles.input}
-            placeholder="Enter a title for your thread"
+            placeholder="Give it a catchy title!"
+            placeholderTextColor="#a3bffa"
             value={groupTitle}
             onChangeText={(text) => setGroupTitle(text)}
           />
           <Text style={styles.label}>Description</Text>
           <TextInput
             style={[styles.input, styles.textArea]}
-            placeholder="Describe the purpose of this thread"
+            placeholder="What’s this thread about?"
+            placeholderTextColor="#a3bffa"
             value={groupDescription}
             onChangeText={(text) => setGroupDescription(text)}
             multiline
-            numberOfLines={6}
+            numberOfLines={4}
           />
           <TouchableOpacity
             style={styles.button}
             onPress={handleCreateGroupChat}
           >
-            <Text style={styles.buttonText}>Create Thread</Text>
+            <Text style={styles.buttonText}>Launch Thread</Text>
           </TouchableOpacity>
         </View>
       )}
 
-      {/* List of Group Chats */}
       {groupChats.length > 0 && (
         <FlatList
           data={groupChats}
@@ -219,51 +229,53 @@ const GroupChat = () => {
         />
       )}
 
-      {/* Selected Group Chat Display */}
       {loading ? (
-        <Text style={styles.loadingText}>Loading...</Text>
+        <Text style={styles.loadingText}>Loading the vibe...</Text>
       ) : groupChat ? (
         <ScrollView style={styles.chatContainer}>
           <Text style={styles.groupTitle}>{groupChat.title}</Text>
           <Text style={styles.groupDescription}>{groupChat.description}</Text>
 
-          {/* Messages Section */}
-          <Text style={styles.sectionHeader}>Messages</Text>
+          <Text style={styles.sectionHeader}>Chat Zone</Text>
           <View style={styles.messagesContainer}>
             {groupChat.messages.length > 0 ? (
               groupChat.messages.map((msg) => (
                 <View key={msg._id} style={styles.messageBubble}>
                   <Text style={styles.messageSender}>
-                    {msg.sender.name || "Unknown"}
+                    {msg.sender?.name || "Anonymous User"}
                   </Text>
                   <Text style={styles.messageText}>{msg.text}</Text>
-                  <Text style={styles.messageTimestamp}>{msg.timestamp}</Text>
+                  <Text style={styles.messageTimestamp}>
+                    {new Date(msg.timestamp).toLocaleString()}
+                  </Text>
                 </View>
               ))
             ) : (
               <Text style={styles.noMessages}>
-                No messages yet. Start the conversation!
+                Quiet here... Drop a message!
               </Text>
             )}
           </View>
 
-          {/* Message Input */}
-          <TextInput
-            style={[styles.input, styles.messageInput]}
-            placeholder="Type your message..."
-            value={message}
-            onChangeText={(text) => setMessage(text)}
-            multiline
-          />
-          <TouchableOpacity
-            style={styles.sendButton}
-            onPress={handleSendMessage}
-          >
-            <Text style={styles.buttonText}>Send</Text>
-          </TouchableOpacity>
+          <View style={styles.messageInputContainer}>
+            <TextInput
+              style={[styles.input, styles.messageInput]}
+              placeholder="Say something awesome..."
+              placeholderTextColor="#a3bffa"
+              value={message}
+              onChangeText={(text) => setMessage(text)}
+              multiline
+            />
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSendMessage}
+            >
+              <Text style={styles.buttonText}>Send</Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       ) : (
-        <Text style={styles.noChats}>No group chats available.</Text>
+        <Text style={styles.noChats}>No threads yet—create one!</Text>
       )}
     </View>
   );
@@ -272,211 +284,254 @@ const GroupChat = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 20,
-    backgroundColor: "#f5f7fa",
+    backgroundColor: "#2ecc71",
+    paddingVertical: 25,
+    paddingHorizontal: 15,
   },
   header: {
-    fontSize: 28,
-    fontWeight: "700",
+    fontSize: 34,
+    fontWeight: "800",
+    color: "#fff",
     textAlign: "center",
-    marginBottom: 25,
-    color: "#1a2a44",
-    letterSpacing: 0.5,
+    marginBottom: 30,
+    letterSpacing: 1.5,
+    textShadowColor: "#2E7D32",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 6,
   },
   createButton: {
-    backgroundColor: "#2ecc71",
-    paddingVertical: 12,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    backgroundColor: "#2E7D32",
+    paddingVertical: 14,
+    paddingHorizontal: 25,
+    borderRadius: 30,
+    alignSelf: "center",
+    marginBottom: 25,
+    shadowColor: "#2E7D32",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
   },
   createForm: {
-    marginBottom: 25,
-    backgroundColor: "#ffffff",
-    padding: 15,
-    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    padding: 25,
+    borderRadius: 20,
+    marginBottom: 30,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: "rgba(11, 83, 32, 0.3)",
   },
   label: {
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 8,
-    color: "#34495e",
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1e293b",
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.8,
   },
   input: {
-    borderWidth: 1,
-    borderColor: "#e0e4e9",
-    borderRadius: 10,
-    padding: 12,
-    marginBottom: 15,
-    backgroundColor: "#ffffff",
+    borderWidth: 2,
+    borderColor: "#2E7D32",
+    borderRadius: 12,
+    padding: 15,
     fontSize: 16,
-    color: "#2c3e50",
+    color: "#1e293b",
+    backgroundColor: "#fff",
+    marginBottom: 20,
+    shadowColor: "#2E7D32",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   textArea: {
-    height: 120,
+    height: 110,
     textAlignVertical: "top",
-    paddingTop: 12,
+    paddingTop: 15,
   },
   button: {
-    backgroundColor: "#2ecc71",
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  sendButton: {
     backgroundColor: "#2E7D32",
-    paddingVertical: 12,
-    borderRadius: 12,
+    paddingVertical: 15,
+    borderRadius: 30,
     alignItems: "center",
-    marginBottom: 20,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowColor: "#2E7D32",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonText: {
-    color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "600",
-    letterSpacing: 0.3,
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: 1,
   },
   groupChatList: {
-    marginBottom: 25,
+    marginBottom: 30,
+    paddingHorizontal: 5,
   },
   groupChatItem: {
-    backgroundColor: "#ffffff",
-    padding: 15,
-    borderRadius: 12,
-    marginRight: 12,
-    borderWidth: 1,
-    borderColor: "#e0e4e9",
-    minWidth: 220,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    padding: 20,
+    borderRadius: 15,
+    marginRight: 15,
+    minWidth: 250,
+    maxWidth: 280,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+    borderWidth: 1,
+    borderColor: "rgba(13, 107, 18, 0.2)",
   },
   selectedGroupChatItem: {
-    backgroundColor: "#e8f4fd",
+    backgroundColor: "#e0e7ff",
     borderColor: "#2E7D32",
     borderWidth: 2,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
   },
   groupChatTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: "#2ecc71",
-    marginBottom: 5,
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#2E7D32",
+    marginBottom: 8,
+    letterSpacing: 0.5,
   },
   groupChatDescription: {
     fontSize: 14,
-    color: "#7f8c8d",
+    color: "#64748b",
     lineHeight: 20,
+    numberOfLines: 2,
+    ellipsizeMode: "tail",
   },
   chatContainer: {
     flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    padding: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.95)",
+    borderRadius: 20,
+    padding: 25,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   groupTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#1a2a44",
+    fontSize: 28,
+    fontWeight: "800",
+    color: "#1e293b",
+    marginBottom: 12,
     textAlign: "center",
-    marginBottom: 10,
+    letterSpacing: 1,
   },
   groupDescription: {
     fontSize: 16,
-    color: "#7f8c8d",
-    marginBottom: 20,
+    color: "#64748b",
+    marginBottom: 25,
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 24,
+    fontStyle: "italic",
   },
   sectionHeader: {
-    fontSize: 20,
-    fontWeight: "600",
-    marginBottom: 15,
-    color: "#34495e",
-    borderBottomWidth: 1,
-    borderBottomColor: "#e0e4e9",
-    paddingBottom: 5,
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#2E7D32",
+    marginBottom: 20,
+    textAlign: "center",
+    textTransform: "uppercase",
+    letterSpacing: 1,
   },
   messagesContainer: {
     flex: 1,
-    marginBottom: 20,
+    marginBottom: 25,
   },
   messageBubble: {
-    backgroundColor: "#f0f3f7",
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 12,
-    borderWidth: 0,
+    backgroundColor: "#e0e7ff",
+    padding: 15,
+    borderRadius: 15,
+    marginBottom: 15,
+    borderLeftWidth: 4,
+    borderLeftColor: "#2E7D32",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   messageSender: {
     fontSize: 16,
     fontWeight: "600",
     color: "#2E7D32",
-    marginBottom: 4,
+    marginBottom: 6,
   },
   messageText: {
     fontSize: 16,
-    color: "#2c3e50",
-    lineHeight: 22,
+    color: "#1e293b",
+    lineHeight: 24,
   },
   messageTimestamp: {
     fontSize: 12,
-    color: "#95a5a6",
+    color: "#94a3b8",
     textAlign: "right",
-    marginTop: 4,
+    marginTop: 6,
+    fontStyle: "italic",
   },
   noMessages: {
     fontSize: 16,
-    color: "#7f8c8d",
+    color: "#64748b",
     textAlign: "center",
+    marginVertical: 25,
     fontStyle: "italic",
   },
+  messageInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
+    padding: 10,
+    borderRadius: 15,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4,
+  },
   messageInput: {
-    height: 80,
-    textAlignVertical: "top",
-    backgroundColor: "#f0f3f7",
+    flex: 1,
+    height: 50,
     borderRadius: 12,
-    padding: 12,
+    paddingHorizontal: 15,
+    marginRight: 10,
+    backgroundColor: "#fff",
+    borderColor: "#2E7D32",
+    borderWidth: 1,
+  },
+  sendButton: {
+    backgroundColor: "#2E7D32",
+    paddingVertical: 12,
+    paddingHorizontal: 25,
+    borderRadius: 25,
+    shadowColor: "#2E7D32",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 6,
   },
   loadingText: {
     fontSize: 18,
-    color: "#7f8c8d",
+    color: "#2E7D32",
     textAlign: "center",
-    marginTop: 20,
+    marginTop: 30,
     fontStyle: "italic",
   },
   noChats: {
     fontSize: 18,
-    color: "#7f8c8d",
+    color: "#94a3b8",
     textAlign: "center",
-    marginTop: 20,
+    marginTop: 30,
     fontStyle: "italic",
   },
 });

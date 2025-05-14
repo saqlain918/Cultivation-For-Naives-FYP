@@ -34,6 +34,9 @@ const userSchema = mongoose.Schema(
     rating: {
       type: String,
     },
+    expertise: {
+      type: String,
+    },
     type: {
       type: String,
       required: true,

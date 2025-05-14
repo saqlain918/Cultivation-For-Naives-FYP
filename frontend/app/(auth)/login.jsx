@@ -85,6 +85,7 @@ const Login = () => {
             cnic: res.data.user.cnic,
             phoneNumber: res.data.user.phoneNumber,
             address: res.data.user.address,
+            type: res.data.user.type,
           },
         }); // Navigate to regular Home page
       }

@@ -10,16 +10,14 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import axios from "axios";
 
-const Home = () => {
+const Expert = () => {
   const router = useRouter();
   const profileData = useLocalSearchParams();
   console.log("Profile Data:", profileData); // Debug log to check profileData
 
-  // State for hero image index
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [ads, setAds] = useState([]);
 
-  // Array of hero images (10 PNGs)
   useEffect(() => {
     const fetchAds = async () => {
       try {
@@ -30,26 +28,58 @@ const Home = () => {
         if (response.data && response.data.advertisements) {
           const adsWithFixedImageUri = response.data.advertisements.map(
             (ad) => {
-              const fixedImageUri = ad.image.replace(/\\/g, "/"); // Convert \ to /
-              // console.log("Fixed Image URI:", fixedImageUri); // Log corrected image URI
+              const fixedImageUri = ad.image.replace(/\\/g, "/");
               return { ...ad, image: fixedImageUri };
             }
           );
 
-          setAds(adsWithFixedImageUri);
+          // Top-5 filtering logic
+          const now = new Date();
+          const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+          const recentAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) > twentyFourHoursAgo : true
+          );
+          const olderAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) <= twentyFourHoursAgo : false
+          );
+
+          recentAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+          olderAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+
+          const topFiveAds = [...recentAds, ...olderAds].slice(0, 5);
+
+          console.log("All ads fetched:", adsWithFixedImageUri);
+          console.log(
+            "Top 5 ads selected:",
+            topFiveAds.map((ad) => ({
+              title: ad.title,
+              createdAt: ad.createdAt,
+              updatedAt: ad.updatedAt,
+            }))
+          );
+
+          setAds(topFiveAds);
         } else {
           setAds([]);
         }
       } catch (error) {
         console.error("Error fetching ads:", error);
-        Alert.alert("Error", "Failed to fetch advertisements");
+        setAds([]);
       }
     };
 
     fetchAds();
   }, []);
 
-  // Update image every 3 seconds only if there are ads
   useEffect(() => {
     if (ads.length === 0) return;
 
@@ -60,11 +90,30 @@ const Home = () => {
     return () => clearInterval(interval);
   }, [ads]);
 
+  const handleAdClick = () => {
+    if (ads.length > 0 && ads[currentImageIndex]) {
+      const selectedAd = ads[currentImageIndex];
+      console.log("Navigating to ManageAds with:", {
+        imageUri: selectedAd.image,
+        adId: selectedAd._id,
+        fromExpert: "true",
+      });
+      router.push({
+        pathname: "/manage-ads",
+        params: {
+          imageUri: selectedAd.image,
+          adId: selectedAd._id,
+          fromExpert: "true", // Changed to fromExpert
+        },
+      });
+    }
+  };
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       {/* Header Section */}
       <View style={styles.header}>
-        <Text style={styles.logo}>Cultivation For Naives</Text>
+        <Text style={styles.logo}>Expert Dashboard</Text>
         <TouchableOpacity
           onPress={() =>
             router.push({
@@ -80,34 +129,36 @@ const Home = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section (Sliding Bar) */}
-      {ads.length > 0 ? (
-        <View style={styles.heroSection}>
+      {/* Hero Section */}
+      {ads.length > 0 && ads[currentImageIndex] ? (
+        <TouchableOpacity style={styles.heroSection} onPress={handleAdClick}>
           <Image
             source={{
               uri: ads[currentImageIndex].image,
               cache: "reload",
             }}
             style={styles.heroImage}
+            onError={(e) =>
+              console.log("Image load error:", e.nativeEvent.error)
+            }
           />
           <Text style={styles.heroText}>{ads[currentImageIndex].title}</Text>
-        </View>
+        </TouchableOpacity>
       ) : (
         <View style={styles.heroSection}>
           <View style={[styles.heroImage, styles.placeholderContainer]}>
             <Text>No advertisements available</Text>
           </View>
           <Text style={styles.heroText}>
-            Empowering Agriculture with Smart Solutions
+            Empowering Experts with Smart Solutions
           </Text>
         </View>
       )}
 
       {/* Features Section */}
       <View style={styles.featuresSection}>
-        <Text style={styles.sectionTitle}>Features</Text>
+        <Text style={styles.sectionTitle}>Expert Features</Text>
         <View style={styles.featuresGrid}>
-          {/* Create Thread */}
           <TouchableOpacity
             style={styles.dashboardCard}
             onPress={() => router.push("/CreateThread")}
@@ -119,7 +170,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Create Thread</Text>
           </TouchableOpacity>
 
-          {/* Consult Expert */}
           <TouchableOpacity
             style={styles.featureCard}
             onPress={() =>
@@ -133,19 +183,18 @@ const Home = () => {
               source={require("../../assets/icons/expert-consult.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Consult Expert</Text>
+            <Text style={styles.cardTitle}>Manage Slots</Text>
           </TouchableOpacity>
 
-          {/* Manage Ads */}
           <TouchableOpacity
             style={styles.dashboardCard}
-            onPress={() => router.push("/AdvertiseHere")}
+            onPress={() => router.push("/manage-ads")}
           >
             <Image
               source={require("../../assets/icons/Ads.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Advertise Here</Text>
+            <Text style={styles.cardTitle}>Manage Ads</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -154,7 +203,6 @@ const Home = () => {
       <View style={styles.alertsSection}>
         <Text style={styles.sectionTitle}>Alerts & Insights</Text>
         <View style={styles.alertsGrid}>
-          {/* Weather Prediction */}
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/weather-prediction")}
@@ -166,7 +214,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Weather Prediction</Text>
           </TouchableOpacity>
 
-          {/* Early Alerts */}
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/early-alerts")}
@@ -175,22 +222,21 @@ const Home = () => {
               source={require("../../assets/icons/alerts.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Early Alerts</Text>
+            <Text style={styles.cardTitle}>View Alerts</Text>
           </TouchableOpacity>
         </View>
       </View>
 
-      {/* Feedback & Payments Section */}
+      {/* Feedback Section */}
       <View style={styles.feedbackSection}>
-        <Text style={styles.sectionTitle}>View Feedback</Text>
+        <Text style={styles.sectionTitle}>Expert Feedback</Text>
         <View style={styles.feedbackGrid}>
-          {/* Feedback */}
           <TouchableOpacity
             style={styles.feedbackCard}
             onPress={() =>
               router.push({
                 pathname: "/ExpertFeedbackView",
-                params: { expertId: profileData.id }, // Pass expertId
+                params: { expertId: profileData.id },
               })
             }
           >
@@ -198,10 +244,8 @@ const Home = () => {
               source={require("../../assets/icons/feedback.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Views Feedback</Text>
+            <Text style={styles.cardTitle}>View Feedback</Text>
           </TouchableOpacity>
-
-          {/* Make Payment */}
         </View>
       </View>
     </ScrollView>
@@ -244,6 +288,14 @@ const styles = StyleSheet.create({
     height: 320,
     borderRadius: 10,
   },
+  placeholderContainer: {
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
+    width: "100%",
+    height: 320,
+    borderRadius: 10,
+  },
   heroText: {
     marginTop: 10,
     fontSize: 18,
@@ -258,7 +310,7 @@ const styles = StyleSheet.create({
     marginLeft: 15,
     marginBottom: 10,
   },
-  dashboardGrid: {
+  featuresGrid: {
     flexDirection: "row",
     justifyContent: "space-around",
     marginBottom: 15,
@@ -266,6 +318,17 @@ const styles = StyleSheet.create({
   dashboardCard: {
     backgroundColor: "#fff",
     width: "30%",
+    padding: 10,
+    borderRadius: 10,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 2,
+  },
+  featureCard: {
+    backgroundColor: "#fff",
+    width: "28%",
     padding: 10,
     borderRadius: 10,
     alignItems: "center",
@@ -283,22 +346,6 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     textAlign: "center",
     fontSize: 14,
-  },
-  featuresGrid: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginBottom: 15,
-  },
-  featureCard: {
-    backgroundColor: "#fff",
-    width: "28%",
-    padding: 10,
-    borderRadius: 10,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 2,
   },
   alertsGrid: {
     flexDirection: "row",
@@ -332,43 +379,6 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 2,
   },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  modalAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 20,
-  },
-  input: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-  },
 });
 
-export default Home;
+export default Expert;

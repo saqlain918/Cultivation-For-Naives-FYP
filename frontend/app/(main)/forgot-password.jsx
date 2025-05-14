@@ -151,7 +151,7 @@ const ForgotPassword = () => {
         <Button
           title="Back to Login"
           onPress={() => router.push("/login")}
-          color="#FFD700"
+          color="#535c68"
         />
       </View>
     </View>

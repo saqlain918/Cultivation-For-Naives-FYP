@@ -19,7 +19,6 @@ const Home = () => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [ads, setAds] = useState([]);
 
-  // Array of hero images (10 PNGs)
   useEffect(() => {
     const fetchAds = async () => {
       try {
@@ -30,26 +29,58 @@ const Home = () => {
         if (response.data && response.data.advertisements) {
           const adsWithFixedImageUri = response.data.advertisements.map(
             (ad) => {
-              const fixedImageUri = ad.image.replace(/\\/g, "/"); // Convert \ to /
-              // console.log("Fixed Image URI:", fixedImageUri); // Log corrected image URI
+              const fixedImageUri = ad.image.replace(/\\/g, "/");
               return { ...ad, image: fixedImageUri };
             }
           );
 
-          setAds(adsWithFixedImageUri);
+          // Top-5 filtering logic
+          const now = new Date();
+          const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+          const recentAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) > twentyFourHoursAgo : true
+          );
+          const olderAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) <= twentyFourHoursAgo : false
+          );
+
+          recentAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+          olderAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+
+          const topFiveAds = [...recentAds, ...olderAds].slice(0, 5);
+
+          console.log("All ads fetched:", adsWithFixedImageUri);
+          console.log(
+            "Top 5 ads selected:",
+            topFiveAds.map((ad) => ({
+              title: ad.title,
+              createdAt: ad.createdAt,
+              updatedAt: ad.updatedAt,
+            }))
+          );
+
+          setAds(topFiveAds);
         } else {
           setAds([]);
         }
       } catch (error) {
         console.error("Error fetching ads:", error);
-        Alert.alert("Error", "Failed to fetch advertisements");
+        setAds([]);
       }
     };
 
     fetchAds();
   }, []);
 
-  // Update image every 3 seconds only if there are ads
   useEffect(() => {
     if (ads.length === 0) return;
 
@@ -59,6 +90,25 @@ const Home = () => {
 
     return () => clearInterval(interval);
   }, [ads]);
+
+  const handleAdClick = () => {
+    if (ads.length > 0 && ads[currentImageIndex]) {
+      const selectedAd = ads[currentImageIndex];
+      console.log("Navigating to ManageAds with:", {
+        imageUri: selectedAd.image,
+        adId: selectedAd._id,
+        fromHome: "true",
+      });
+      router.push({
+        pathname: "/manage-ads",
+        params: {
+          imageUri: selectedAd.image,
+          adId: selectedAd._id,
+          fromHome: "true",
+        },
+      });
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -83,17 +133,20 @@ const Home = () => {
         </LinearGradient>
 
         {/* Hero Section */}
-        {ads.length > 0 ? (
-          <View style={styles.heroSection}>
+        {ads.length > 0 && ads[currentImageIndex] ? (
+          <TouchableOpacity style={styles.heroSection} onPress={handleAdClick}>
             <Image
               source={{
                 uri: ads[currentImageIndex].image,
                 cache: "reload",
               }}
               style={styles.heroImage}
+              onError={(e) =>
+                console.log("Image load error:", e.nativeEvent.error)
+              }
             />
             <Text style={styles.heroText}>{ads[currentImageIndex].title}</Text>
-          </View>
+          </TouchableOpacity>
         ) : (
           <View style={styles.heroSection}>
             <View style={[styles.heroImage, styles.placeholderContainer]}>
@@ -116,8 +169,8 @@ const Home = () => {
             />
             <FeatureCard
               icon={require("../../assets/icons/Ads.png")}
-              title="Advertise Here"
-              onPress={() => router.push("/AdvertiseHere")}
+              title="Manage Ads"
+              onPress={() => router.push("/manage-ads")}
             />
           </View>
         </View>
@@ -189,23 +242,20 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 15,
   },
-  heroGradient: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 15,
-    borderBottomLeftRadius: 15,
-    borderBottomRightRadius: 15,
+  placeholderContainer: {
+    width: "100%",
+    height: 200,
+    borderRadius: 15,
+    backgroundColor: "#f0f0f0",
+    justifyContent: "center",
+    alignItems: "center",
   },
   heroText: {
     fontSize: 18,
     fontWeight: "600",
-    color: "#fff",
+    color: "#333",
     textAlign: "center",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: -1, height: 1 },
-    textShadowRadius: 5,
+    marginTop: 10,
   },
   section: {
     paddingHorizontal: 15,

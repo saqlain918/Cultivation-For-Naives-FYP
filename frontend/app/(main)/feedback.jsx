@@ -3,45 +3,48 @@ import {
   View,
   Text,
   TextInput,
-  Button,
   StyleSheet,
   TouchableOpacity,
   Alert,
+  ActivityIndicator,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import axios from "axios";
 import { useLocalSearchParams } from "expo-router";
 
 const FeedbackScreen = () => {
-  const { expertId, expertName } = useLocalSearchParams(); // Get expertId and expertName from navigation
+  const { expertId, expertName, userId } = useLocalSearchParams(); // Assume userId from navigation or auth
   const [message, setMessage] = useState("");
-  const [rating, setRating] = useState("");
+  const [rating, setRating] = useState(0); // Rating from 0 (none) to 5
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const submitFeedback = async () => {
     if (!message.trim()) {
       Alert.alert("Error", "Please enter your feedback.");
       return;
     }
-    if (rating && (isNaN(rating) || rating < 1 || rating > 5)) {
-      Alert.alert("Error", "Rating must be a number between 1 and 5.");
+
+    if (!userId) {
+      Alert.alert("Error", "User ID is missing. Please log in again.");
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const response = await axios.post(
         `${process.env.EXPO_PUBLIC_BACKEND_URI}/api/feedback`,
         {
           expertId,
-          userId: "67cce41c98488183a1f55978", // Replace with actual authenticated user ID
+          userId,
           message,
-          rating: rating ? parseInt(rating) : null,
+          rating: rating || null,
         }
       );
 
       if (response.data.success) {
         Alert.alert("Success", "Feedback submitted successfully!");
         setMessage("");
-        setRating("");
+        setRating(0);
       } else {
         Alert.alert(
           "Error",
@@ -51,14 +54,17 @@ const FeedbackScreen = () => {
     } catch (error) {
       console.error("Error submitting feedback:", error);
       Alert.alert("Error", "Failed to submit feedback. Please try again.");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
+  const handleStarPress = (starValue) => {
+    setRating(starValue);
+  };
+
   return (
-    <LinearGradient
-      colors={["#78e08f", "#b8e994"]} // Gradient from green to light green
-      style={styles.container}
-    >
+    <LinearGradient colors={["#78e08f", "#b8e994"]} style={styles.container}>
       <View style={styles.card}>
         <Text style={styles.title}>Feedback for {expertName} 🌟</Text>
         <Text style={styles.subtitle}>
@@ -73,23 +79,38 @@ const FeedbackScreen = () => {
           onChangeText={setMessage}
           multiline
           numberOfLines={4}
+          textAlignVertical="top"
         />
 
-        <TextInput
-          style={styles.ratingInput}
-          placeholder="Rating (1-5, optional)"
-          placeholderTextColor="#888"
-          value={rating}
-          onChangeText={setRating}
-          keyboardType="numeric"
-        />
+        <View style={styles.starContainer}>
+          <Text style={styles.ratingLabel}>Rate this expert:</Text>
+          <View style={styles.starsWrapper}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity
+                key={star}
+                onPress={() => handleStarPress(star)}
+                style={styles.starButton}
+              >
+                <Text style={styles.star}>{star <= rating ? "★" : "☆"}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
 
-        <TouchableOpacity style={styles.submitButton} onPress={submitFeedback}>
+        <TouchableOpacity
+          style={[styles.submitButton, isSubmitting && styles.disabledButton]}
+          onPress={submitFeedback}
+          disabled={isSubmitting}
+        >
           <LinearGradient
-            colors={["#ff9f1a", "#ffaf40"]} // Gradient button from orange to light orange
+            colors={["#ff9f1a", "#ffaf40"]}
             style={styles.gradientButton}
           >
-            <Text style={styles.buttonText}>Submit Feedback</Text>
+            {isSubmitting ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>Submit Feedback</Text>
+            )}
           </LinearGradient>
         </TouchableOpacity>
       </View>
@@ -102,22 +123,24 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 20,
     justifyContent: "center",
+    backgroundColor: "#f0f0f0",
   },
   card: {
     backgroundColor: "#fff",
-    borderRadius: 15,
-    padding: 20,
+    borderRadius: 20,
+    padding: 25,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10, // For Android shadow
+    shadowOpacity: 0.2,
+    shadowRadius: 15,
+    elevation: 10,
+    marginVertical: 20,
   },
   title: {
     fontSize: 28,
-    fontWeight: "bold",
+    fontWeight: "700",
     textAlign: "center",
-    color: "#333",
+    color: "#2E7D32",
     marginBottom: 10,
   },
   subtitle: {
@@ -125,14 +148,15 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#666",
     marginBottom: 25,
+    fontStyle: "italic",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
+    borderColor: "#ccc",
+    borderRadius: 12,
     padding: 15,
     marginBottom: 20,
-    backgroundColor: "#f9f9f9",
+    backgroundColor: "#fafafa",
     fontSize: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
@@ -140,33 +164,51 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     elevation: 3,
   },
-  ratingInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 30,
-    backgroundColor: "#f9f9f9",
+  starContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: 25,
+    paddingHorizontal: 10,
+  },
+  ratingLabel: {
     fontSize: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    color: "#666",
+    fontWeight: "500",
+  },
+  starsWrapper: {
+    flexDirection: "row",
+    marginLeft: 10,
+  },
+  starButton: {
+    padding: 5, // Reduced padding for tighter spacing
+  },
+  star: {
+    fontSize: 28, // Slightly smaller stars for balance
+    color: "#ff9f1a",
   },
   submitButton: {
     borderRadius: 25,
     overflow: "hidden",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
+    elevation: 5,
   },
   gradientButton: {
     paddingVertical: 15,
-    paddingHorizontal: 30,
+    paddingHorizontal: 40,
     alignItems: "center",
   },
   buttonText: {
     color: "#fff",
     fontSize: 18,
-    fontWeight: "bold",
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  disabledButton: {
+    opacity: 0.7,
   },
 });
 

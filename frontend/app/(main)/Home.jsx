@@ -6,11 +6,10 @@ import {
   TouchableOpacity,
   ScrollView,
   Image,
-  LogBox,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import axios from "axios";
-LogBox.ignoreAllLogs();
+
 const Home = () => {
   const router = useRouter();
   const profileData = useLocalSearchParams();
@@ -27,19 +26,52 @@ const Home = () => {
         if (response.data && response.data.advertisements) {
           const adsWithFixedImageUri = response.data.advertisements.map(
             (ad) => {
-              const fixedImageUri = ad.image.replace(/\\/g, "/"); // Convert \ to /
-              // console.log("Fixed Image URI:", fixedImageUri); // Log corrected image URI
+              const fixedImageUri = ad.image.replace(/\\/g, "/");
               return { ...ad, image: fixedImageUri };
             }
           );
 
-          setAds(adsWithFixedImageUri);
+          // Top-5 filtering logic
+          const now = new Date();
+          const twentyFourHoursAgo = new Date(now - 24 * 60 * 60 * 1000);
+
+          const recentAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) > twentyFourHoursAgo : true
+          );
+          const olderAds = adsWithFixedImageUri.filter((ad) =>
+            ad.createdAt ? new Date(ad.createdAt) <= twentyFourHoursAgo : false
+          );
+
+          recentAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+          olderAds.sort(
+            (a, b) =>
+              new Date(b.updatedAt || b.createdAt || new Date()) -
+              new Date(a.updatedAt || a.createdAt || new Date())
+          );
+
+          const topFiveAds = [...recentAds, ...olderAds].slice(0, 5);
+
+          console.log("All ads fetched:", adsWithFixedImageUri);
+          console.log(
+            "Top 5 ads selected:",
+            topFiveAds.map((ad) => ({
+              title: ad.title,
+              createdAt: ad.createdAt,
+              updatedAt: ad.updatedAt,
+            }))
+          );
+
+          setAds(topFiveAds);
         } else {
           setAds([]);
         }
       } catch (error) {
         console.error("Error fetching ads:", error);
-        Alert.alert("Error", "Failed to fetch advertisements");
+        setAds([]);
       }
     };
 
@@ -55,6 +87,25 @@ const Home = () => {
 
     return () => clearInterval(interval);
   }, [ads]);
+
+  const handleAdClick = () => {
+    if (ads.length > 0 && ads[currentImageIndex]) {
+      const selectedAd = ads[currentImageIndex];
+      console.log("Navigating to ManageAds with:", {
+        imageUri: selectedAd.image,
+        adId: selectedAd._id,
+        fromHome: "true",
+      });
+      router.push({
+        pathname: "/manage-ads",
+        params: {
+          imageUri: selectedAd.image,
+          adId: selectedAd._id,
+          fromHome: "true",
+        },
+      });
+    }
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
@@ -77,18 +128,21 @@ const Home = () => {
         </TouchableOpacity>
       </View>
 
-      {/* Hero Section - Only show if there are ads */}
-      {ads.length > 0 ? (
-        <View style={styles.heroSection}>
+      {/* Hero Section */}
+      {ads.length > 0 && ads[currentImageIndex] ? (
+        <TouchableOpacity style={styles.heroSection} onPress={handleAdClick}>
           <Image
             source={{
               uri: ads[currentImageIndex].image,
               cache: "reload",
             }}
             style={styles.heroImage}
+            onError={(e) =>
+              console.log("Image load error:", e.nativeEvent.error)
+            }
           />
           <Text style={styles.heroText}>{ads[currentImageIndex].title}</Text>
-        </View>
+        </TouchableOpacity>
       ) : (
         <View style={styles.heroSection}>
           <View style={[styles.heroImage, styles.placeholderContainer]}>
@@ -126,13 +180,13 @@ const Home = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.dashboardCard}
-            onPress={() => router.push("/AdvertiseHere")}
+            onPress={() => router.push("/manage-ads")}
           >
             <Image
               source={require("../../assets/icons/Ads.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Advertise Here</Text>
+            <Text style={styles.cardTitle}>Manage Ads</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -180,7 +234,6 @@ const Home = () => {
       <View style={styles.alertsSection}>
         <Text style={styles.sectionTitle}>Alerts & Insights</Text>
         <View style={styles.alertsGrid}>
-          {/* Weather Prediction */}
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/weather-prediction")}
@@ -192,7 +245,6 @@ const Home = () => {
             <Text style={styles.cardTitle}>Weather Prediction</Text>
           </TouchableOpacity>
 
-          {/* Early Alerts */}
           <TouchableOpacity
             style={styles.alertCard}
             onPress={() => router.push("/early-alerts")}
@@ -201,7 +253,7 @@ const Home = () => {
               source={require("../../assets/icons/alerts.png")}
               style={styles.cardIcon}
             />
-            <Text style={styles.cardTitle}>Early Alerts</Text>
+            <Text style={styles.cardTitle}>View Alerts</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -210,9 +262,6 @@ const Home = () => {
       <View style={styles.feedbackSection}>
         <Text style={styles.sectionTitle}>Timeline</Text>
         <View style={styles.feedbackGrid}>
-          {/* Feedback */}
-
-          {/* Make Payment */}
           <TouchableOpacity
             style={styles.feedbackCard}
             onPress={() => router.push("/TimelineCrops")}
@@ -271,6 +320,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#f0f0f0",
     justifyContent: "center",
     alignItems: "center",
+    width: "100%",
+    height: 200,
+    borderRadius: 10,
   },
   heroText: {
     marginTop: 10,
@@ -359,43 +411,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 5,
     elevation: 2,
-  },
-  modalContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-  },
-  modalContent: {
-    width: "90%",
-    backgroundColor: "#fff",
-    padding: 20,
-    borderRadius: 10,
-    alignItems: "center",
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    marginBottom: 20,
-  },
-  modalAvatar: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 20,
-  },
-  input: {
-    width: "100%",
-    borderWidth: 1,
-    borderColor: "#ccc",
-    padding: 10,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalButtons: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
   },
 });
 

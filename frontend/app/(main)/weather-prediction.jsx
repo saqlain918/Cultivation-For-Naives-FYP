@@ -1,91 +1,169 @@
 import axios from "axios";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   ActivityIndicator,
-  TextInput,
   TouchableOpacity,
+  Alert,
+  Dimensions,
 } from "react-native";
+import * as Location from "expo-location";
+import { LineChart } from "react-native-chart-kit";
 
 const WeatherForecastScreen = () => {
-  const [cityName, setCityName] = useState(""); // Store the city name entered by the user
-  const [weatherData, setWeatherData] = useState(null); // Store the weather data
-  const [loading, setLoading] = useState(false); // For loading state
+  const [weatherData, setWeatherData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [location, setLocation] = useState(null);
 
-  // Fetch city coordinates first, then weather data
+  const getLocation = async () => {
+    console.log("Requesting location permission...");
+    let { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== "granted") {
+      Alert.alert(
+        "Permission Denied",
+        "Location permission is required to fetch weather data."
+      );
+      return;
+    }
+    console.log("Fetching location...");
+    let loc = await Location.getCurrentPositionAsync({});
+    const { latitude, longitude } = loc.coords;
+    console.log("Location fetched:", latitude, longitude);
+    setLocation({ latitude, longitude });
+  };
+
+  useEffect(() => {
+    console.log("Initializing location fetch...");
+    getLocation();
+  }, []);
+
   const fetchWeatherData = async () => {
-    if (!cityName) {
-      alert("Please enter a city name.");
+    if (!location) {
+      Alert.alert(
+        "Location Unavailable",
+        "Please wait while we fetch your location or try again."
+      );
       return;
     }
 
     try {
       setLoading(true);
-      console.log("Fetching coordinates for city:", cityName);
-
-      // Step 1: Fetch latitude and longitude for the city using OpenWeatherMap API
-      const cityRes = await axios.get(
-        `https://api.openweathermap.org/data/2.5/weather`,
-        {
-          params: {
-            q: cityName,
-            appid: "4c232eb1957cccd4a65fc16d37a6108c", // Replace with your API key
-          },
-        }
+      console.log(
+        "Fetching weather for:",
+        location.latitude,
+        location.longitude
       );
-
-      const { lat, lon } = cityRes.data.coord;
-      console.log("Latitude:", lat, "Longitude:", lon);
-
-      // Step 2: Fetch 7-day weather forecast using Open-Meteo API
       const weatherRes = await axios.get(
         `https://api.open-meteo.com/v1/forecast`,
         {
           params: {
-            latitude: lat,
-            longitude: lon,
+            latitude: location.latitude,
+            longitude: location.longitude,
             daily:
               "temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode",
             timezone: "auto",
           },
         }
       );
-      setWeatherData(weatherRes.data.daily); // Store daily weather data
+      console.log("Weather response:", weatherRes.data);
+      setWeatherData(weatherRes.data.daily);
     } catch (error) {
       console.error("Error fetching data:", error.message);
-      alert("Error fetching weather data. Please try again.");
+      Alert.alert("Error", "Error fetching weather data. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
+  // Prepare data for charts
+  const chartConfig = {
+    backgroundGradientFrom: "#fff",
+    backgroundGradientTo: "#fff",
+    decimalPlaces: 1,
+    color: (opacity = 1) => `rgba(2, 136, 209, ${opacity})`, // Matches theme
+    labelColor: (opacity = 1) => `rgba(0, 0, 0, ${opacity})`,
+    style: {
+      borderRadius: 16,
+    },
+    propsForDots: {
+      r: "6",
+      strokeWidth: "2",
+      stroke: "#0288D1",
+    },
+  };
+
+  const screenWidth = Dimensions.get("window").width - 40; // Adjust for padding
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>7-Day Weather Forecast</Text>
-
-      {/* Input Field to Enter City Name */}
-      <TextInput
-        style={styles.input}
-        placeholder="Enter City Name"
-        value={cityName}
-        onChangeText={setCityName}
-      />
-
-      {/* Button to Fetch Weather Data */}
       <TouchableOpacity style={styles.button} onPress={fetchWeatherData}>
-        <Text style={styles.buttonText}>Get Weather</Text>
+        <Text style={styles.buttonText}>Get Weather for Your Location</Text>
       </TouchableOpacity>
-
-      {/* Display the Weather Data */}
       {loading ? (
         <View style={styles.centered}>
           <ActivityIndicator size="large" color="#4CAF50" />
         </View>
       ) : weatherData ? (
         <View style={styles.weatherContainer}>
+          {/* Temperature Chart */}
+          <Text style={styles.chartTitle}>Temperature Forecast (°C)</Text>
+          <LineChart
+            data={{
+              labels: weatherData.time.map((date) =>
+                new Date(date).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              ),
+              datasets: [
+                {
+                  data: weatherData.temperature_2m_max,
+                  color: (opacity = 1) => `rgba(239, 83, 80, ${opacity})`, // Red for max temp
+                  strokeWidth: 2,
+                },
+                {
+                  data: weatherData.temperature_2m_min,
+                  color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`, // Blue for min temp
+                  strokeWidth: 2,
+                },
+              ],
+              legend: ["Max Temp", "Min Temp"],
+            }}
+            width={screenWidth}
+            height={220}
+            chartConfig={chartConfig}
+            bezier
+            style={styles.chart}
+          />
+          {/* Precipitation Chart */}
+          <Text style={styles.chartTitle}>Precipitation Forecast (mm)</Text>
+          <LineChart
+            data={{
+              labels: weatherData.time.map((date) =>
+                new Date(date).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                })
+              ),
+              datasets: [
+                {
+                  data: weatherData.precipitation_sum,
+                  color: (opacity = 1) => `rgba(76, 175, 80, ${opacity})`, // Green for precipitation
+                  strokeWidth: 2,
+                },
+              ],
+            }}
+            width={screenWidth}
+            height={220}
+            chartConfig={chartConfig}
+            bezier
+            style={styles.chart}
+          />
+          {/* Weather Cards */}
           {weatherData.time.map((date, index) => (
             <View key={index} style={styles.weatherCard}>
               <Text style={styles.date}>
@@ -98,7 +176,6 @@ const WeatherForecastScreen = () => {
               <Text style={styles.details}>
                 Rain: {weatherData.precipitation_sum[index]} mm
               </Text>
-              {/* Check if rain is expected */}
               <Text style={styles.details}>
                 {weatherData.precipitation_sum[index] > 0
                   ? "Rain expected"
@@ -131,16 +208,6 @@ const styles = StyleSheet.create({
     color: "#0288D1",
     textAlign: "center",
     marginBottom: 20,
-  },
-  input: {
-    height: 50,
-    borderColor: "#0288D1",
-    borderWidth: 1,
-    borderRadius: 8,
-    marginBottom: 20,
-    paddingLeft: 10,
-    fontSize: 16,
-    color: "#0288D1",
   },
   button: {
     backgroundColor: "#0288D1",
@@ -186,6 +253,18 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: "red",
     textAlign: "center",
+  },
+  chartTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#0288D1",
+    marginTop: 20,
+    marginBottom: 10,
+    textAlign: "center",
+  },
+  chart: {
+    marginVertical: 8,
+    borderRadius: 16,
   },
 });
 
